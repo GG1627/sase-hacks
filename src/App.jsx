@@ -4,6 +4,12 @@ import SplitProfile from './components/SplitProfile';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('home');
+  const [battleData, setBattleData] = useState(null);
+
+  const handleProfileComplete = (profiles) => {
+    setBattleData(profiles);
+    setCurrentScreen('draw-p1');
+  };
 
   return (
     <div className="app">
@@ -15,7 +21,7 @@ export default function App() {
       )}
 
       {currentScreen === 'profile' && (
-        <SplitProfile onComplete={() => setCurrentScreen('draw-p1')} />
+        <SplitProfile onComplete={handleProfileComplete} />
       )}
 
       {currentScreen === 'draw-p1' && (

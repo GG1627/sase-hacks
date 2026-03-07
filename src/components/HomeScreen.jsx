@@ -2,13 +2,13 @@ import heroBg from '../assets/hero_bg.png';
 import { LuPencil, LuZap, LuFilm, LuCrown } from 'react-icons/lu';
 import { GiCrossedSwords } from 'react-icons/gi';
 
-// Each icon gets a slight random tilt for that messy kid-drawn feel
+// Each icon gets a slight random tilt + staggered float delay
 const ICONS = [
-    { Icon: LuPencil, rotate: '-12deg', top: '9%', left: '8%' },
-    { Icon: GiCrossedSwords, rotate: '6deg', top: '7%', left: '22%' },
-    { Icon: LuZap, rotate: '-5deg', top: '11%', left: '45%' },
-    { Icon: LuFilm, rotate: '10deg', top: '6%', left: '68%' },
-    { Icon: LuCrown, rotate: '-8deg', top: '10%', left: '88%' },
+    { Icon: LuPencil, rotate: '-12deg', top: '9%', left: '8%', delay: '0s' },
+    { Icon: GiCrossedSwords, rotate: '6deg', top: '7%', left: '22%', delay: '0.4s' },
+    { Icon: LuZap, rotate: '-5deg', top: '11%', left: '45%', delay: '0.8s' },
+    { Icon: LuFilm, rotate: '10deg', top: '6%', left: '68%', delay: '0.2s' },
+    { Icon: LuCrown, rotate: '-8deg', top: '10%', left: '88%', delay: '0.6s' },
 ];
 
 export default function HomeScreen({ onStart, onGallery }) {
@@ -78,11 +78,17 @@ export default function HomeScreen({ onStart, onGallery }) {
             </svg>
 
             {/* Scattered tilted icons — positioned absolute, not in a strip */}
-            {ICONS.map(({ Icon, rotate, top, left }, i) => (
+            {ICONS.map(({ Icon, rotate, top, left, delay }, i) => (
                 <div
                     key={i}
                     className="absolute z-10 text-white select-none"
-                    style={{ top, left, transform: `rotate(${rotate})`, opacity: 0.85 }}
+                    style={{
+                        top,
+                        left,
+                        opacity: 0.85,
+                        animation: `icon-float 3s ease-in-out ${delay} infinite`,
+                        transform: `rotate(${rotate})`,
+                    }}
                 >
                     <Icon size={30} />
                 </div>
@@ -140,7 +146,7 @@ export default function HomeScreen({ onStart, onGallery }) {
                 <div className="flex gap-6 mt-4">
                     <button
                         onClick={onStart}
-                        className="hover:cursor-pointer px-10 py-4 rounded-xl font-bold transition-all duration-200 hover:scale-108 active:scale-95"
+                        className="hover:cursor-pointer px-10 py-4 rounded-xl font-bold active:scale-95"
                         style={{
                             fontFamily: "'Mansalva', cursive",
                             fontSize: '1.3rem',
@@ -148,8 +154,8 @@ export default function HomeScreen({ onStart, onGallery }) {
                             border: '2px solid rgba(255,255,255,0.4)',
                             color: '#fff',
                             backdropFilter: 'blur(8px)',
-                            transform: 'rotate(-1.5deg)',
                             letterSpacing: '0.03em',
+                            animation: 'btn-battle-pulse 3s ease-in-out 2s infinite',
                         }}
                     >
                         ⚔ Let's Battle!
