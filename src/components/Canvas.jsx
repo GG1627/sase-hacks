@@ -3,12 +3,13 @@ import SignatureCanvas from 'react-signature-canvas';
 import heroBg from '../assets/hero_bg.png';
 import {
     LuMic, LuPenLine, LuEraser, LuUndo2, LuCheck,
-    LuPencil, LuZap, LuEye, LuCrown, LuFlame
+    LuPencil, LuZap, LuCrown, LuFlame, LuEye
 } from 'react-icons/lu';
 import { GiCrossedSwords } from 'react-icons/gi';
 import { useVoice } from '../hooks/useVoice';
+import { useVolume } from '../hooks/useVolume';
 
-// Floating background icons — same vibe as HomeScreen
+// ── Floating background icons ──
 const BG_ICONS = [
     { Icon: LuPencil, rotate: '-12deg', top: '6%', left: '6%', delay: '0s' },
     { Icon: GiCrossedSwords, rotate: '18deg', top: '8%', left: '50%', delay: '0.4s' },
@@ -18,11 +19,74 @@ const BG_ICONS = [
     { Icon: LuEye, rotate: '14deg', top: '86%', left: '88%', delay: '0.7s' },
 ];
 
+// ── Particle effect presets ──
+const PARTICLE_PRESETS = {
+    fire: {
+        colors: ['#FF4500', '#FF6B35', '#FFD700', '#FF8C00'],
+        sizeRange: [4, 12], lifetime: 800, spread: 20, gravity: -0.8,
+        glow: true, emoji: null,
+    },
+    ice: {
+        colors: ['#00BFFF', '#87CEEB', '#E0F7FF', '#B0E0E6'],
+        sizeRange: [3, 8], lifetime: 1000, spread: 15, gravity: 0.3,
+        glow: true, emoji: '❄',
+    },
+    lightning: {
+        colors: ['#FFFF00', '#FFD700', '#FFFACD', '#FFF8DC'],
+        sizeRange: [2, 6], lifetime: 400, spread: 35, gravity: 0,
+        glow: true, emoji: '⚡',
+    },
+    magic: {
+        colors: ['#9B59B6', '#8E44AD', '#D2B4DE', '#F5B7B1'],
+        sizeRange: [3, 10], lifetime: 1200, spread: 25, gravity: -0.3,
+        glow: true, emoji: '✨',
+    },
+    poison: {
+        colors: ['#00FF00', '#32CD32', '#7CFC00', '#ADFF2F'],
+        sizeRange: [4, 10], lifetime: 900, spread: 18, gravity: 0.4,
+        glow: true, emoji: null,
+    },
+    dark: {
+        colors: ['#4A0E4E', '#2C003E', '#7B2D8E', '#1A1A2E'],
+        sizeRange: [5, 14], lifetime: 1100, spread: 22, gravity: -0.2,
+        glow: false, emoji: null,
+    },
+};
+
+// ── Backdrop keywords → Unsplash query ──
+const BACKDROP_MAP = {
+    'city': 'dark+city+night',
+    'ruined city': 'destroyed+city+ruins',
+    'ruins': 'ancient+ruins+dark',
+    'forest': 'dark+enchanted+forest',
+    'ocean': 'stormy+dark+ocean',
+    'space': 'outer+space+stars+nebula',
+    'desert': 'desert+sand+dunes+night',
+    'mountain': 'dark+mountain+peak+storm',
+    'volcano': 'volcano+lava+eruption',
+    'castle': 'dark+castle+gothic',
+    'dungeon': 'dark+dungeon+stone',
+    'arena': 'colosseum+arena+ancient',
+    'sky': 'dramatic+sky+clouds+dark',
+    'battlefield': 'war+battlefield+dark',
+    'cave': 'dark+crystal+cave',
+    'underwater': 'deep+ocean+underwater+dark',
+    'snow': 'blizzard+snow+frozen+landscape',
+    'hell': 'fiery+inferno+lava+dark',
+    'heaven': 'clouds+golden+light+ethereal',
+    'cemetery': 'cemetery+graveyard+dark+night',
+};
+
+// ── Weather / atmospheric CSS overlays ──
+const WEATHER_KEYWORDS = ['rain', 'snow', 'storm', 'blizzard', 'fog', 'mist'];
+
 export default function Canvas({ playerData, bossData, onComplete }) {
     const activeColor = playerData.color;
 
     // ── Canvas state ──
     const sigCanvas = useRef(null);
+    const particleCanvasRef = useRef(null);
+    const canvasContainerRef = useRef(null);
     const [penColor, setPenColor] = useState(activeColor);
     const [isErasing, setIsErasing] = useState(false);
     const [strokeWidth, setStrokeWidth] = useState({ min: 1, max: 4 });
@@ -31,15 +95,34 @@ export default function Canvas({ playerData, bossData, onComplete }) {
     const [timeLeft, setTimeLeft] = useState(300);
     const [isTimeUp, setIsTimeUp] = useState(false);
 
-    // ── Voice ──
+    // ── Particles ──
+    const [activeEffect, setActiveEffect] = useState(null);
+    const particlesRef = useRef([]);
+    const pointerRef = useRef({ x: 0, y: 0, active: false });
+    const particleRafRef = useRef(null);
+
+    // ── Backdrop ──
+    const [backdropUrl, setBackdropUrl] = useState(null);
+    const [backdropOpacity, setBackdropOpacity] = useState(0);
+    const [weatherEffect, setWeatherEffect] = useState(null);
+
+    // ── Shake (volume reactivity) ──
+    const [shakeIntensity, setShakeIntensity] = useState(0);
+
+    // ── Playback stroke recording ──
+    const strokeTimelineRef = useRef([]);
+    const sessionStartRef = useRef(Date.now());
+
+    // ── Volume hook ──
+    const { volume, isShouting, startVolume, stopVolume } = useVolume(0.4);
+
+    // ── Voice handler ──
     const handleVoiceCommand = useCallback((text) => {
         // Tool switching
         if (text.includes('eraser') || text.includes('erase')) {
-            setPenColor('#ffffff');
-            setIsErasing(true);
+            setPenColor('#ffffff'); setIsErasing(true);
         } else if (text.includes('pen') || text.includes('pencil') || text.includes('draw')) {
-            setPenColor(activeColor);
-            setIsErasing(false);
+            setPenColor(activeColor); setIsErasing(false);
         }
 
         // Color changing
@@ -48,23 +131,70 @@ export default function Canvas({ playerData, bossData, onComplete }) {
             orange: '#EA580C', teal: '#0D9488', brown: '#B45309', bronze: '#B45309',
             pink: '#DB2777', rose: '#DB2777', black: '#111111', yellow: '#FACC15',
             white: '#ffffff', gray: '#6B7280', grey: '#6B7280', gold: '#CA8A04',
+            crimson: '#DC143C', cyan: '#00CED1', magenta: '#FF00FF', navy: '#000080',
+            silver: '#C0C0C0', scarlet: '#FF2400', lime: '#00FF00', maroon: '#800000',
+            indigo: '#4B0082', coral: '#FF7F50', turquoise: '#40E0D0',
         };
         for (const [colorName, hex] of Object.entries(colorMap)) {
             if (text.includes(colorName)) {
-                setPenColor(hex);
-                setIsErasing(false);
+                setPenColor(hex); setIsErasing(false);
             }
         }
 
         // Thickness
-        if (text.includes('thicker') || text.includes('bigger') || text.includes('fat')) {
+        if (text.includes('thicker') || text.includes('bigger') || text.includes('fat') || text.includes('bold') || text.includes('heavy')) {
             setStrokeWidth(prev => ({ min: Math.min(prev.min + 1.5, 8), max: Math.min(prev.max + 2, 16) }));
-        } else if (text.includes('thinner') || text.includes('smaller') || text.includes('thin') || text.includes('fine')) {
+        } else if (text.includes('thinner') || text.includes('smaller') || text.includes('thin') || text.includes('fine') || text.includes('light')) {
             setStrokeWidth(prev => ({ min: Math.max(prev.min - 1.5, 0.5), max: Math.max(prev.max - 2, 2) }));
         }
 
+        // ── FEATURE 1: Voice-Activated Particle Effects ──
+        if (text.includes('fire') || text.includes('flame') || text.includes('burn') || text.includes('ignite')) {
+            setActiveEffect('fire');
+        } else if (text.includes('ice') || text.includes('frost') || text.includes('freeze') || text.includes('frozen')) {
+            setActiveEffect('ice');
+        } else if (text.includes('lightning') || text.includes('electric') || text.includes('thunder') || text.includes('shock') || text.includes('zap')) {
+            setActiveEffect('lightning');
+        } else if (text.includes('magic') || text.includes('sparkle') || text.includes('enchant') || text.includes('spell') || text.includes('glow')) {
+            setActiveEffect('magic');
+        } else if (text.includes('poison') || text.includes('toxic') || text.includes('acid') || text.includes('venom')) {
+            setActiveEffect('poison');
+        } else if (text.includes('dark') || text.includes('shadow') || text.includes('void') || text.includes('darkness')) {
+            setActiveEffect('dark');
+        } else if (text.includes('normal') || text.includes('no effect') || text.includes('stop effect') || text.includes('clear effect') || text.includes('remove effect')) {
+            setActiveEffect(null);
+        }
+
+        // ── FEATURE 3: Voice-Triggered Backdrops ──
+        for (const [keyword, query] of Object.entries(BACKDROP_MAP)) {
+            if (text.includes(keyword)) {
+                setBackdropUrl(`https://source.unsplash.com/1024x768/?${query}`);
+                setBackdropOpacity(0.2);
+                break;
+            }
+        }
+        // Backdrop opacity control
+        if (text.includes('brighter background') || text.includes('more background') || text.includes('show background')) {
+            setBackdropOpacity(prev => Math.min(prev + 0.1, 0.5));
+        } else if (text.includes('dimmer background') || text.includes('less background') || text.includes('hide background')) {
+            setBackdropOpacity(prev => Math.max(prev - 0.1, 0));
+        } else if (text.includes('remove background') || text.includes('clear background') || text.includes('no background')) {
+            setBackdropUrl(null); setBackdropOpacity(0);
+        }
+
+        // Weather effects
+        for (const w of WEATHER_KEYWORDS) {
+            if (text.includes(w)) {
+                setWeatherEffect(w.includes('rain') || w.includes('storm') ? 'rain' : w.includes('snow') || w.includes('blizzard') ? 'snow' : 'fog');
+                break;
+            }
+        }
+        if (text.includes('clear weather') || text.includes('stop weather') || text.includes('no weather') || text.includes('sunny')) {
+            setWeatherEffect(null);
+        }
+
         // Actions
-        if (text.includes('clear') || text.includes('start over') || text.includes('reset')) {
+        if (text.includes('clear') && !text.includes('clear effect') && !text.includes('clear background') && !text.includes('clear weather')) {
             if (!isTimeUp && sigCanvas.current) sigCanvas.current.clear();
         }
         if (text.includes('undo') || text.includes('go back') || text.includes('mistake') || text.includes('oops')) {
@@ -73,14 +203,139 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                 if (data && data.length > 0) { data.pop(); sigCanvas.current.fromData(data); }
             }
         }
-        if (text.includes('finish') || text.includes("i'm done") || text.includes('im done') || text.includes('submit')) {
+        if (text.includes('finish') || text.includes("i'm done") || text.includes('im done') || text.includes('submit') || text.includes('done')) {
             if (!isTimeUp) setTimeLeft(0);
         }
     }, [activeColor, isTimeUp]);
 
     const { transcript, isListening, toggleListening, startListening, stopListening } = useVoice(handleVoiceCommand);
 
-    useEffect(() => { startListening(); return () => stopListening(); }, [startListening, stopListening]);
+    // ── Init: start voice + volume ──
+    useEffect(() => {
+        startListening();
+        startVolume();
+        sessionStartRef.current = Date.now();
+        return () => { stopListening(); stopVolume(); };
+    }, [startListening, stopListening, startVolume, stopVolume]);
+
+    // ── FEATURE 2: Volume → Shake + Stroke Boost ──
+    useEffect(() => {
+        if (isShouting) {
+            setShakeIntensity(Math.min(volume * 20, 12));
+            // Temporarily boost stroke thickness when yelling
+            setStrokeWidth(prev => ({
+                min: Math.min(prev.min + volume * 3, 10),
+                max: Math.min(prev.max + volume * 4, 18),
+            }));
+        } else {
+            setShakeIntensity(0);
+        }
+    }, [volume, isShouting]);
+
+    // ── FEATURE 1: Particle system loop ──
+    useEffect(() => {
+        const particleCanvas = particleCanvasRef.current;
+        if (!particleCanvas) return;
+        const ctx = particleCanvas.getContext('2d');
+
+        const resizeCanvas = () => {
+            const container = canvasContainerRef.current;
+            if (container) {
+                particleCanvas.width = container.offsetWidth;
+                particleCanvas.height = container.offsetHeight;
+            }
+        };
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const loop = () => {
+            ctx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+
+            // Spawn new particles if effect is active and pointer is down
+            if (activeEffect && pointerRef.current.active && PARTICLE_PRESETS[activeEffect]) {
+                const preset = PARTICLE_PRESETS[activeEffect];
+                const count = 3 + Math.floor(volume * 8); // More particles when louder
+                for (let i = 0; i < count; i++) {
+                    particlesRef.current.push({
+                        x: pointerRef.current.x + (Math.random() - 0.5) * preset.spread,
+                        y: pointerRef.current.y + (Math.random() - 0.5) * preset.spread,
+                        vx: (Math.random() - 0.5) * 3,
+                        vy: (Math.random() - 0.5) * 3 + preset.gravity,
+                        size: preset.sizeRange[0] + Math.random() * (preset.sizeRange[1] - preset.sizeRange[0]),
+                        color: preset.colors[Math.floor(Math.random() * preset.colors.length)],
+                        alpha: 1,
+                        decay: 1 / (preset.lifetime / 16),
+                        glow: preset.glow,
+                        emoji: preset.emoji,
+                    });
+                }
+            }
+
+            // Update & draw particles
+            particlesRef.current = particlesRef.current.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+                if (p.alpha <= 0) return false;
+
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+
+                if (p.emoji) {
+                    ctx.font = `${p.size * 2}px serif`;
+                    ctx.fillText(p.emoji, p.x, p.y);
+                } else {
+                    if (p.glow) {
+                        ctx.shadowColor = p.color;
+                        ctx.shadowBlur = p.size * 3;
+                    }
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+                return true;
+            });
+
+            particleRafRef.current = requestAnimationFrame(loop);
+        };
+        loop();
+
+        return () => {
+            cancelAnimationFrame(particleRafRef.current);
+            window.removeEventListener('resize', resizeCanvas);
+        };
+    }, [activeEffect, volume]);
+
+    // Track pointer position for particle spawning
+    const handlePointerMove = (e) => {
+        const container = canvasContainerRef.current;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        pointerRef.current.x = e.clientX - rect.left;
+        pointerRef.current.y = e.clientY - rect.top;
+    };
+    const handlePointerDown = (e) => {
+        pointerRef.current.active = true;
+        handlePointerMove(e);
+
+        // FEATURE 4: Record stroke timestamp
+        strokeTimelineRef.current.push({
+            type: 'down',
+            time: Date.now() - sessionStartRef.current,
+            x: pointerRef.current.x,
+            y: pointerRef.current.y,
+        });
+    };
+    const handlePointerUp = () => {
+        pointerRef.current.active = false;
+        strokeTimelineRef.current.push({
+            type: 'up',
+            time: Date.now() - sessionStartRef.current,
+        });
+    };
 
     // ── Timer tick ──
     useEffect(() => {
@@ -97,27 +352,32 @@ export default function Canvas({ playerData, bossData, onComplete }) {
     const handleComplete = () => {
         if (sigCanvas.current) {
             const base64Data = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
+            // Also capture the particle canvas for composite
+            let particleData = null;
+            if (particleCanvasRef.current) {
+                particleData = particleCanvasRef.current.toDataURL('image/png');
+            }
             onComplete({
                 drawing: base64Data,
+                particleOverlay: particleData,
                 voiceDescription: transcript.trim() || playerData.battleCry,
+                strokeTimeline: strokeTimelineRef.current,
+                drawingData: sigCanvas.current.toData(),
             });
         }
     };
 
     const handleClear = () => { if (!isTimeUp && sigCanvas.current) sigCanvas.current.clear(); };
-
     const handleUndo = () => {
         if (!isTimeUp && sigCanvas.current) {
             const data = sigCanvas.current.toData();
             if (data && data.length > 0) { data.pop(); sigCanvas.current.fromData(data); }
         }
     };
-
     const toggleEraserFn = () => {
         if (isErasing) { setPenColor(activeColor); setIsErasing(false); }
         else { setPenColor('#ffffff'); setIsErasing(true); }
     };
-
     const fmt = (s) => {
         const mins = Math.floor(s / 60);
         const secs = s % 60;
@@ -128,7 +388,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
     return (
         <div className="relative w-full h-full overflow-hidden">
 
-            {/* ── Background: same dark look as HomeScreen ── */}
+            {/* ── Background ── */}
             <img src={heroBg} alt="" className="absolute inset-0 w-full h-full object-cover object-center" />
             <div className="absolute inset-0 bg-black/80" />
 
@@ -157,10 +417,10 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                 </div>
             ))}
 
-            {/* ── Content: flex column everything centered ── */}
+            {/* ── Content ── */}
             <div className="relative z-20 flex flex-col items-center justify-center w-full h-full gap-3 px-6 py-6">
 
-                {/* ── Header row: Player name + Timer ── */}
+                {/* ── Header row ── */}
                 <div className="w-full max-w-4xl flex justify-between items-center">
                     <div>
                         <p style={{
@@ -178,21 +438,54 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                         </h2>
                     </div>
 
-                    {/* Timer pill */}
-                    <div style={{
-                        padding: '8px 24px', borderRadius: '16px',
-                        background: timeLeft <= 30 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)',
-                        border: `2px solid ${timeLeft <= 30 ? '#ef4444' : activeColor + '80'}`,
-                        boxShadow: `0 0 20px ${timeLeft <= 30 ? 'rgba(239,68,68,0.3)' : activeColor + '30'}`,
-                        transform: timeLeft <= 10 ? (timeLeft % 2 === 0 ? 'scale(1.05) rotate(2deg)' : 'scale(1.05) rotate(-2deg)') : 'none',
-                        transition: 'transform 0.2s',
-                    }}>
-                        <span style={{
-                            fontFamily: "'Mansalva', cursive", fontSize: '2.2rem',
-                            color: timeLeft <= 30 ? '#ef4444' : '#fff', lineHeight: 1,
+                    {/* Active effect badge */}
+                    {activeEffect && (
+                        <div style={{
+                            padding: '4px 14px', borderRadius: '12px',
+                            background: 'rgba(255,255,255,0.08)',
+                            border: `1px solid ${PARTICLE_PRESETS[activeEffect]?.colors[0]}80`,
+                            fontFamily: "'Comic Relief', serif", fontSize: '0.65rem',
+                            color: PARTICLE_PRESETS[activeEffect]?.colors[0],
+                            letterSpacing: '0.12em', textTransform: 'uppercase',
+                            animation: 'pulse-glow 1.5s infinite',
                         }}>
-                            {fmt(timeLeft)}
-                        </span>
+                            {activeEffect.toUpperCase()} MODE
+                        </div>
+                    )}
+
+                    {/* Volume meter */}
+                    <div className="flex items-center gap-2">
+                        <div style={{
+                            width: '60px', height: '8px', borderRadius: '4px',
+                            background: 'rgba(255,255,255,0.1)',
+                            overflow: 'hidden',
+                        }}>
+                            <div style={{
+                                width: `${Math.min(volume * 200, 100)}%`, height: '100%',
+                                background: isShouting
+                                    ? 'linear-gradient(90deg, #ef4444, #ff6b35)'
+                                    : `linear-gradient(90deg, ${activeColor}80, ${activeColor})`,
+                                borderRadius: '4px',
+                                transition: 'width 0.1s, background 0.15s',
+                            }} />
+                        </div>
+
+                        {/* Timer pill */}
+                        <div style={{
+                            padding: '8px 24px', borderRadius: '16px',
+                            background: timeLeft <= 30 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)',
+                            border: `2px solid ${timeLeft <= 30 ? '#ef4444' : activeColor + '80'}`,
+                            boxShadow: `0 0 20px ${timeLeft <= 30 ? 'rgba(239,68,68,0.3)' : activeColor + '30'}`,
+                            transform: timeLeft <= 10 ? (timeLeft % 2 === 0 ? 'scale(1.05) rotate(2deg)' : 'scale(1.05) rotate(-2deg)') : 'none',
+                            transition: 'transform 0.2s',
+                        }}>
+                            <span style={{
+                                fontFamily: "'Mansalva', cursive", fontSize: '2.2rem',
+                                color: timeLeft <= 30 ? '#ef4444' : '#fff', lineHeight: 1,
+                            }}>
+                                {fmt(timeLeft)}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -236,15 +529,87 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                         </button>
                     </div>
 
-                    {/* Drawing Surface */}
-                    <div className="flex-1 rounded-2xl overflow-hidden relative"
+                    {/* Drawing Surface with Particle Overlay */}
+                    <div
+                        ref={canvasContainerRef}
+                        className="flex-1 rounded-2xl overflow-hidden relative"
                         style={{
                             background: '#fff',
                             border: `3px solid ${activeColor}60`,
                             boxShadow: `0 0 40px ${activeColor}20, 0 8px 32px rgba(0,0,0,0.4)`,
+                            // FEATURE 2: Volume shake
+                            transform: shakeIntensity > 0
+                                ? `translate(${(Math.random() - 0.5) * shakeIntensity}px, ${(Math.random() - 0.5) * shakeIntensity}px)`
+                                : 'none',
+                            transition: shakeIntensity > 0 ? 'none' : 'transform 0.2s',
                         }}
                         onDoubleClick={toggleEraserFn}
+                        onPointerMove={handlePointerMove}
+                        onPointerDown={handlePointerDown}
+                        onPointerUp={handlePointerUp}
+                        onPointerLeave={handlePointerUp}
                     >
+                        {/* FEATURE 3: Backdrop image behind drawing */}
+                        {backdropUrl && (
+                            <img
+                                src={backdropUrl}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                                style={{
+                                    opacity: backdropOpacity,
+                                    transition: 'opacity 0.8s ease-in-out',
+                                    zIndex: 0,
+                                }}
+                            />
+                        )}
+
+                        {/* FEATURE 3: Weather overlay */}
+                        {weatherEffect && (
+                            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 5 }}>
+                                {weatherEffect === 'rain' && (
+                                    <div style={{
+                                        position: 'absolute', inset: 0, overflow: 'hidden',
+                                        background: 'linear-gradient(transparent 0%, rgba(100,150,200,0.03) 100%)',
+                                    }}>
+                                        {Array.from({ length: 60 }).map((_, i) => (
+                                            <div key={i} style={{
+                                                position: 'absolute',
+                                                left: `${Math.random() * 100}%`,
+                                                top: `-${Math.random() * 20}%`,
+                                                width: '1px', height: `${12 + Math.random() * 18}px`,
+                                                background: 'rgba(100,150,220,0.4)',
+                                                animation: `rain-fall ${0.5 + Math.random() * 0.5}s linear ${Math.random() * 1}s infinite`,
+                                            }} />
+                                        ))}
+                                    </div>
+                                )}
+                                {weatherEffect === 'snow' && (
+                                    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                                        {Array.from({ length: 40 }).map((_, i) => (
+                                            <div key={i} style={{
+                                                position: 'absolute',
+                                                left: `${Math.random() * 100}%`,
+                                                top: `-5%`,
+                                                width: `${3 + Math.random() * 5}px`,
+                                                height: `${3 + Math.random() * 5}px`,
+                                                borderRadius: '50%',
+                                                background: 'rgba(255,255,255,0.6)',
+                                                animation: `snow-fall ${2 + Math.random() * 3}s linear ${Math.random() * 2}s infinite`,
+                                            }} />
+                                        ))}
+                                    </div>
+                                )}
+                                {weatherEffect === 'fog' && (
+                                    <div style={{
+                                        position: 'absolute', inset: 0,
+                                        background: 'rgba(200,200,220,0.08)',
+                                        backdropFilter: 'blur(0.5px)',
+                                    }} />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Time's up overlay */}
                         {isTimeUp && (
                             <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
                                 <h2 style={{
@@ -255,14 +620,33 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                                 </h2>
                             </div>
                         )}
+
+                        {/* The actual drawing canvas */}
                         <SignatureCanvas
                             ref={sigCanvas}
                             penColor={penColor}
-                            canvasProps={{ className: 'w-full h-full cursor-crosshair' }}
+                            canvasProps={{ className: 'w-full h-full cursor-crosshair', style: { position: 'relative', zIndex: 2 } }}
                             velocityFilterWeight={0.7}
                             minWidth={strokeWidth.min}
                             maxWidth={strokeWidth.max}
+                            backgroundColor="rgba(0,0,0,0)"
                         />
+
+                        {/* FEATURE 1: Particle overlay canvas */}
+                        <canvas
+                            ref={particleCanvasRef}
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            style={{ zIndex: 3 }}
+                        />
+
+                        {/* Voice-shouting border glow */}
+                        {isShouting && (
+                            <div className="absolute inset-0 pointer-events-none" style={{
+                                zIndex: 4,
+                                boxShadow: `inset 0 0 ${30 + volume * 60}px ${activeColor}60`,
+                                transition: 'box-shadow 0.1s',
+                            }} />
+                        )}
                     </div>
                 </div>
 
@@ -283,16 +667,20 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                         </div>
                         <div className="flex-1 overflow-hidden">
                             <p style={{
-                                fontFamily: "'Comic Relief', serif", fontSize: '0.65rem',
+                                fontFamily: "'Comic Relief', serif", fontSize: '0.6rem',
                                 color: 'rgba(255,255,255,0.4)', marginBottom: '2px',
                             }}>
-                                {isListening ? 'Listening for descriptions + commands...' : 'Voice paused'}
+                                {isListening
+                                    ? activeEffect
+                                        ? `🎨 ${activeEffect.toUpperCase()} mode active — say "normal" to clear`
+                                        : 'Say "fire", "ice", "lightning", "magic", "city", "forest"...'
+                                    : 'Voice paused'}
                             </p>
                             <p className="truncate" style={{
-                                fontFamily: "'Inter', sans-serif", fontSize: '0.9rem',
+                                fontFamily: "'Inter', sans-serif", fontSize: '0.85rem',
                                 color: '#fff', fontStyle: transcript ? 'normal' : 'italic', opacity: transcript ? 1 : 0.4,
                             }}>
-                                {transcript || '"It has laser eyes and breathes fire..."'}
+                                {transcript || '"Give me fire and put me in a ruined city..."'}
                             </p>
                         </div>
                         <button onClick={toggleListening}
