@@ -232,6 +232,33 @@
   }
 }
 
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+
+  30% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
 @keyframes pulse-glow {
 
   0%,

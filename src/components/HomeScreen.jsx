@@ -23,7 +23,7 @@ export default function HomeScreen({ onStart, onGallery }) {
             />
 
             {/* Dark overlay */}
-            <div className="absolute inset-0 bg-black/80" />
+            <div className="absolute inset-0 bg-black/65" />
 
             {/* Wobbly hand-drawn border — rough cubic bezier path instead of clean arcs */}
             <svg
@@ -122,10 +122,10 @@ export default function HomeScreen({ onStart, onGallery }) {
                     }}
                 >
                     <span className="letter-anim" style={{ animationName: 'letter-from-left', animationDelay: '0s' }}>D</span>
-                    <span className="letter-anim" style={{ animationName: 'letter-from-top', animationDelay: '0.12s' }}>r</span>
-                    <span className="letter-anim" style={{ animationName: 'letter-from-bottom', animationDelay: '0.24s' }}>a</span>
-                    <span className="letter-anim" style={{ animationName: 'letter-from-top', animationDelay: '0.36s' }}>w</span>
-                    <span className="letter-anim" style={{ animationName: 'letter-from-right', animationDelay: '0.48s' }}>n</span>
+                    <span className="letter-anim" style={{ animationName: 'letter-from-top', animationDelay: '0.12s' }}>R</span>
+                    <span className="letter-anim" style={{ animationName: 'letter-from-bottom', animationDelay: '0.24s' }}>A</span>
+                    <span className="letter-anim" style={{ animationName: 'letter-from-top', animationDelay: '0.36s' }}>W</span>
+                    <span className="letter-anim" style={{ animationName: 'letter-from-right', animationDelay: '0.48s' }}>N</span>
                 </h1>
 
                 {/* Tagline — Mansalva too, more playful copy */}

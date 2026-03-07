@@ -1,74 +1,57 @@
 import { useState } from 'react';
 import HomeScreen from './components/HomeScreen';
-import SplitProfile from './components/SplitProfile';
+import HeroSetup from './components/HeroSetup';
+import BossSelect from './components/BossSelect';
+import Canvas from './components/Canvas';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('home');
-  const [battleData, setBattleData] = useState(null);
+  const [heroData, setHeroData] = useState(null);
+  const [bossData, setBossData] = useState(null);
 
-  const handleProfileComplete = (profiles) => {
-    setBattleData(profiles);
-    setCurrentScreen('draw-p1');
+  const handleHeroComplete = (hero) => {
+    setHeroData(hero);
+    setCurrentScreen('boss-select');
+  };
+
+  const handleBossSelected = (boss) => {
+    setBossData(boss);
+    setCurrentScreen('draw');
+  };
+
+  const handleDrawingComplete = (drawingResult) => {
+    setHeroData(prev => ({ ...prev, ...drawingResult }));
+    setCurrentScreen('battle');
   };
 
   return (
     <div className="app">
       {currentScreen === 'home' && (
         <HomeScreen
-          onStart={() => setCurrentScreen('profile')}
+          onStart={() => setCurrentScreen('hero-setup')}
           onGallery={() => setCurrentScreen('gallery')}
         />
       )}
 
-      {currentScreen === 'profile' && (
-        <SplitProfile onComplete={handleProfileComplete} />
+      {currentScreen === 'hero-setup' && (
+        <HeroSetup onComplete={handleHeroComplete} />
       )}
 
-      {currentScreen === 'draw-p1' && (
-        <div className="screen-placeholder">
-          <h1>DRAW — PLAYER 1</h1>
-        </div>
+      {currentScreen === 'boss-select' && (
+        <BossSelect heroData={heroData} onSelect={handleBossSelected} />
       )}
 
-      {currentScreen === 'handoff' && (
-        <div className="screen-placeholder">
-          <h1>HANDOFF</h1>
-        </div>
-      )}
-
-      {currentScreen === 'draw-p2' && (
-        <div className="screen-placeholder">
-          <h1>DRAW — PLAYER 2</h1>
-        </div>
-      )}
-
-      {currentScreen === 'forging' && (
-        <div className="screen-placeholder">
-          <h1>FORGING</h1>
-        </div>
-      )}
-
-      {currentScreen === 'origins' && (
-        <div className="screen-placeholder">
-          <h1>ORIGINS</h1>
-        </div>
-      )}
-
-      {currentScreen === 'battle-loading' && (
-        <div className="screen-placeholder">
-          <h1>BATTLE LOADING</h1>
-        </div>
+      {currentScreen === 'draw' && (
+        <Canvas
+          playerData={heroData}
+          bossData={bossData}
+          onComplete={handleDrawingComplete}
+        />
       )}
 
       {currentScreen === 'battle' && (
         <div className="screen-placeholder">
-          <h1>BATTLE</h1>
-        </div>
-      )}
-
-      {currentScreen === 'verdict' && (
-        <div className="screen-placeholder">
-          <h1>VERDICT</h1>
+          <h1>BATTLE RESULT</h1>
         </div>
       )}
 

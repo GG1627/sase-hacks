@@ -35,8 +35,8 @@ The magic is in the gap between input and output — a crude stick figure drawn 
 | Technology | Purpose | Why This One |
 |---|---|---|
 | **React + Vite** | Frontend framework | Fast setup, great DX, perfect for iPad Safari |
-| **Firebase Firestore** | Storing characters, battles, gallery | Real time updates, free tier, zero backend needed |
-| **Firebase Storage** | Storing character drawing images | Pairs perfectly with Firestore, handles image URLs |
+| **MongoDB Atlas (Data API)** | Storing characters, battles, gallery | Direct frontend-to-DB REST API, no backend required |
+| **Cloudinary** | Storing character drawing images | Dead-simple image upload API, handles large CDN delivery |
 | **Gemini Vision API** | Analyzing drawings + generating battle logic | Best multimodal vision model, understands drawings contextually |
 | **ElevenLabs API** | Origin story narration + battle verdict voice | Most expressive and dramatic AI voices available |
 | **Kling AI API** | Generating cinematic battle video clips | Best video generation quality for character animation |
@@ -96,49 +96,47 @@ Create a `.env` file in the root:
 VITE_GEMINI_API_KEY=
 VITE_ELEVENLABS_API_KEY=
 VITE_KLING_API_KEY=
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+VITE_MONGO_DATA_API_URL=
+VITE_MONGO_API_KEY=
+VITE_CLOUDINARY_CLOUD_NAME=
+VITE_CLOUDINARY_UPLOAD_PRESET=
 ```
 
 ---
 
-## 🗄️ Firebase Data Model
+## 🗄️ MongoDB Data Model
 
-```
-firestore/
-│
-├── battles/
-│   └── {battleId}/
-│       ├── createdAt: timestamp
-│       ├── player1/
-│       │   ├── name: string                  # Player's chosen name
-│       │   ├── color: string                 # Player's chosen theme color (hex)
-│       │   ├── battleCry: string             # Player's battle cry
-│       │   ├── drawingURL: string            # Firebase Storage URL of drawing PNG
-│       │   ├── voiceDescription: string      # Transcribed voice input while drawing
-│       │   └── powerProfile: object
-│       │       ├── strength: number          # 1-10
-│       │       ├── speed: number             # 1-10
-│       │       ├── power: string             # e.g. "fire breath", "laser eyes"
-│       │       ├── weakness: string          # e.g. "water", "slow movement"
-│       │       └── personality: string       # e.g. "fierce warrior"
-│       ├── player2/
-│       │   └── (same structure as player1)
-│       ├── winnerId: string                  # "player1" or "player2"
-│       ├── battleNarrative: string           # Gemini-generated 3 sentence battle story
-│       ├── winnerVerdict: string             # Triumphant winner announcement script
-│       ├── loserVerdict: string              # Respectful loser acknowledgment script
-│       └── videoURL: string                  # Kling-generated battle clip URL
+**Database:** `clashOfLegends`
+**Collection:** `battles`
 
-storage/
-└── drawings/
-    └── {battleId}/
-        ├── player1.png
-        └── player2.png
+Document structure:
+```json
+{
+  "_id": "65b...",
+  "createdAt": "2026-03-07T14:00:00Z",
+  "player1": {
+    "name": "The Destroyer",
+    "color": "#DC2626",
+    "battleCry": "Fear me!",
+    "drawingURL": "https://res.cloudinary.com/.../player1.png",
+    "voiceDescription": "Fire powers and flies",
+    "powerProfile": {
+      "strength": 8,
+      "speed": 6,
+      "power": "fire breath",
+      "weakness": "water",
+      "personality": "fierce warrior"
+    }
+  },
+  "player2": {
+    // same structure
+  },
+  "winnerId": "player1",
+  "battleNarrative": "The Destroyer unleashed a torrent of flame...",
+  "winnerVerdict": "The Destroyer reigns supreme!",
+  "loserVerdict": "A valiant effort by the Shadow Queen.",
+  "videoURL": "https://kling.../video.mp4"
+}
 ```
 
 ---
@@ -602,7 +600,7 @@ npm run dev
 |---|---|
 | Kling video takes 30-60 seconds | Dramatic loading screen with battle cry readback fills the time naturally |
 | Web Speech API in noisy rooms | Show live transcript so user can see it's working, add manual text fallback |
-| Firebase Storage image upload size | Export canvas at 512x512 PNG, keeps file small and fast |
+| Cloudinary upload size | Export canvas at 512x512 PNG, keeps file small and fast |
 | Two people drawing on same iPad | Handoff screen makes this a feature not a bug — adds drama |
 | Empty gallery at start of demo | Pre-populate with 3-4 pre-made battles before presenting |
 
