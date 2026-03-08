@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import heroBg from '../assets/hero_bg.png';
 import gokuImg from '../assets/goku.avif';
 import zoroImg from '../assets/zoro.avif';
 import powerImg from '../assets/power.avif';
-import { LuPencil, LuZap, LuCrown, LuFlame } from 'react-icons/lu';
-import { GiCrossedSwords } from 'react-icons/gi';
+import { LuArrowLeft, LuSwords, LuZap, LuCrown, LuFlame } from 'react-icons/lu'; // Kept existing icons, added LuArrowLeft, LuSwords
+import { GiCrossedSwords } from 'react-icons/gi'; // Kept existing icon
+import { audioSystem } from '../utils/audio'; // Import the synthesizer
 
 const BOSSES = [
     {
@@ -41,12 +42,12 @@ const BOSSES = [
 
 // Floating icons
 const BG_ICONS = [
-    { Icon: LuPencil, rotate: '-14deg', top: '6%', left: '6%', delay: '0s' },
+    { Icon: LuArrowLeft, rotate: '-14deg', top: '6%', left: '6%', delay: '0s' }, // Changed LuPencil to LuArrowLeft
     // { Icon: GiCrossedSwords, rotate: '8deg', top: '8%', left: '48%', delay: '0.4s' },
     { Icon: LuZap, rotate: '-6deg', top: '5%', left: '92%', delay: '0.8s' },
     { Icon: LuCrown, rotate: '12deg', top: '90%', left: '10%', delay: '0.6s' },
     { Icon: LuFlame, rotate: '-10deg', top: '88%', left: '50%', delay: '0.3s' },
-    { Icon: LuZap, rotate: '5deg', top: '92%', left: '88%', delay: '0.7s' },
+    { Icon: LuSwords, rotate: '5deg', top: '92%', left: '88%', delay: '0.7s' }, // Changed LuZap to LuSwords
 ];
 
 export default function BossSelect({ heroData, onSelect }) {
@@ -56,16 +57,36 @@ export default function BossSelect({ heroData, onSelect }) {
 
     const activeColor = heroData?.color || '#fff';
 
-    const handleChallenge = () => {
+    const handleConfirm = () => {
         if (!selected) return;
         setLaunching(true);
-        setCountdown("3");
-        setTimeout(() => setCountdown("2"), 1000);
-        setTimeout(() => setCountdown("1"), 2000);
-        setTimeout(() => setCountdown("DRAW!"), 3000);
-        setTimeout(() => {
-            onSelect(selected);
-        }, 4000);
+
+        // Resume audio context purely on user interaction
+        audioSystem.resume();
+        // Duck background music so countdown beeps are audible
+        audioSystem.setMusicVolume(0.1);
+
+        const sequence = ['3', '2', '1', 'DRAW!'];
+        let step = 0;
+
+        const interval = setInterval(() => {
+            if (step < sequence.length) {
+                const text = sequence[step];
+                setCountdown(text);
+
+                // Play audio cues
+                if (text === 'DRAW!') {
+                    audioSystem.playGoBeep();
+                } else {
+                    audioSystem.playCountdownBeep();
+                }
+
+                step++;
+            } else {
+                clearInterval(interval);
+                onSelect(selected); // Kept onSelect as it was in the original code
+            }
+        }, 800);
     };
 
     return (
@@ -194,7 +215,7 @@ export default function BossSelect({ heroData, onSelect }) {
                 </div>
 
                 {/* Challenge button */}
-                <button onClick={handleChallenge} disabled={!selected}
+                <button onClick={handleConfirm} disabled={!selected}
                     className="hover:scale-105 active:scale-95 transition-transform"
                     style={{
                         fontFamily: "'Mansalva', cursive", fontSize: '1.4rem',

@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google-cloud/vertexai": "^1.10.0",
+    "@google/genai": "^1.44.0",
+    "@google/generative-ai": "^0.24.1",
     "@tailwindcss/vite": "^4.2.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
@@ -20,6 +23,7 @@
     "react-dom": "^19.2.0",
     "react-icons": "^5.6.0",
     "react-signature-canvas": "^1.1.0-alpha.2",
+    "roughjs": "^4.6.6",
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {

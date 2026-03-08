@@ -1,5 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import SignatureCanvas from 'react-signature-canvas';
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import heroBg from '../assets/hero_bg.png';
 import {
     LuMic, LuPenLine, LuEraser, LuUndo2, LuCheck,
@@ -7,7 +6,7 @@ import {
 } from 'react-icons/lu';
 import { GiCrossedSwords } from 'react-icons/gi';
 import { useVoice } from '../hooks/useVoice';
-import { useVolume } from '../hooks/useVolume';
+import { audioSystem } from '../utils/audio';
 
 // ── Floating background icons ──
 const BG_ICONS = [
@@ -53,28 +52,29 @@ const PARTICLE_PRESETS = {
     },
 };
 
-// ── Backdrop keywords → Unsplash query ──
+// ── Extreme Sci-Fi / Fantasy Picsum Photo IDs for backdrops ──
 const BACKDROP_MAP = {
-    'city': 'dark+city+night',
-    'ruined city': 'destroyed+city+ruins',
-    'ruins': 'ancient+ruins+dark',
-    'forest': 'dark+enchanted+forest',
-    'ocean': 'stormy+dark+ocean',
-    'space': 'outer+space+stars+nebula',
-    'desert': 'desert+sand+dunes+night',
-    'mountain': 'dark+mountain+peak+storm',
-    'volcano': 'volcano+lava+eruption',
-    'castle': 'dark+castle+gothic',
-    'dungeon': 'dark+dungeon+stone',
-    'arena': 'colosseum+arena+ancient',
-    'sky': 'dramatic+sky+clouds+dark',
-    'battlefield': 'war+battlefield+dark',
-    'cave': 'dark+crystal+cave',
-    'underwater': 'deep+ocean+underwater+dark',
-    'snow': 'blizzard+snow+frozen+landscape',
-    'hell': 'fiery+inferno+lava+dark',
-    'heaven': 'clouds+golden+light+ethereal',
-    'cemetery': 'cemetery+graveyard+dark+night',
+    'city': '133', // Neon urban night
+    'ruined city': '238', // Desolate ruins
+    'ruins': '1040', // Castle ruins in forest
+    'forest': '1043', // Dark dense jungle
+    'ocean': '1041', // Raging wave crash
+    'space': '104', // Abstract dreamscape/space
+    'moon': '104', // Also space
+    'desert': '147', // Vast dunes
+    'mountain': '225', // Jagged peaks
+    'volcano': '235', // Mountain peak
+    'castle': '1040', // Architecture
+    'dungeon': '1064', // Dark corridor
+    'arena': '1047', // Open field
+    'sky': '1041', // Dramatic sky
+    'battlefield': '212', // Foggy field
+    'cave': '1068', // Dark cavern
+    'underwater': '1016', // Deep blue
+    'snow': '1036', // Frozen peaks
+    'hell': '169', // Dark red tones
+    'heaven': '1044', // Angelic beams
+    'cemetery': '1050', // Eerie mist
 };
 
 // ── Weather / atmospheric CSS overlays ──
@@ -84,12 +84,20 @@ export default function Canvas({ playerData, bossData, onComplete }) {
     const activeColor = playerData.color;
 
     // ── Canvas state ──
-    const sigCanvas = useRef(null);
+    const permanentCanvasRef = useRef(null); // Completed strokes (never cleared by React)
+    const activeCanvasRef = useRef(null);    // Current live stroke
     const particleCanvasRef = useRef(null);
     const canvasContainerRef = useRef(null);
     const [penColor, setPenColor] = useState(activeColor);
     const [isErasing, setIsErasing] = useState(false);
-    const [strokeWidth, setStrokeWidth] = useState({ min: 1, max: 4 });
+    const [strokeWidth, setStrokeWidth] = useState({ min: 2, max: 5 });
+
+    // ── Drawing Data ──
+    const [elements, setElements] = useState([]); // For undo/export only
+    const [isDrawing, setIsDrawing] = useState(false);
+    const isDrawingRef = useRef(false); // Mirror of isDrawing that doesn't go stale in closures
+    const currentPathRef = useRef([]);
+    const drawCanvasRef = permanentCanvasRef; // keep alias for export/handleComplete
 
     // ── Timer ──
     const [timeLeft, setTimeLeft] = useState(300);
@@ -106,15 +114,11 @@ export default function Canvas({ playerData, bossData, onComplete }) {
     const [backdropOpacity, setBackdropOpacity] = useState(0);
     const [weatherEffect, setWeatherEffect] = useState(null);
 
-    // ── Shake (volume reactivity) ──
-    const [shakeIntensity, setShakeIntensity] = useState(0);
-
     // ── Playback stroke recording ──
     const strokeTimelineRef = useRef([]);
     const sessionStartRef = useRef(Date.now());
 
-    // ── Volume hook ──
-    const { volume, isShouting, startVolume, stopVolume } = useVolume(0.4);
+
 
     // ── Voice handler ──
     const handleVoiceCommand = useCallback((text) => {
@@ -125,15 +129,46 @@ export default function Canvas({ playerData, bossData, onComplete }) {
             setPenColor(activeColor); setIsErasing(false);
         }
 
-        // Color changing
+        // Color changing (Massive 150+ Color Dictionary)
         const colorMap = {
-            red: '#DC2626', blue: '#2563EB', green: '#16A34A', purple: '#7C3AED', violet: '#7C3AED',
-            orange: '#EA580C', teal: '#0D9488', brown: '#B45309', bronze: '#B45309',
-            pink: '#DB2777', rose: '#DB2777', black: '#111111', yellow: '#FACC15',
-            white: '#ffffff', gray: '#6B7280', grey: '#6B7280', gold: '#CA8A04',
-            crimson: '#DC143C', cyan: '#00CED1', magenta: '#FF00FF', navy: '#000080',
-            silver: '#C0C0C0', scarlet: '#FF2400', lime: '#00FF00', maroon: '#800000',
-            indigo: '#4B0082', coral: '#FF7F50', turquoise: '#40E0D0',
+            'alice blue': '#f0f8ff', 'antique white': '#faebd7', 'aqua': '#00ffff', 'aquamarine': '#7fffd4',
+            'azure': '#f0ffff', 'beige': '#f5f5dc', 'bisque': '#ffe4c4', 'black': '#111111',
+            'blanched almond': '#ffebcd', 'blue': '#2563EB', 'blue violet': '#8a2be2', 'brown': '#B45309',
+            'bronze': '#B45309', 'burlywood': '#deb887', 'cadet blue': '#5f9ea0', 'chartreuse': '#7fff00',
+            'chocolate': '#d2691e', 'coral': '#ff7f50', 'cornflower blue': '#6495ed', 'cornsilk': '#fff8dc',
+            'crimson': '#dc143c', 'cyan': '#00ffff', 'dark blue': '#00008b', 'dark cyan': '#008b8b',
+            'dark goldenrod': '#b8860b', 'dark gray': '#a9a9a9', 'dark green': '#006400', 'dark grey': '#a9a9a9',
+            'dark khaki': '#bdb76b', 'dark magenta': '#8b008b', 'dark olive green': '#556b2f', 'dark orange': '#ff8c00',
+            'dark orchid': '#9932cc', 'dark red': '#8b0000', 'dark salmon': '#e9967a', 'dark sea green': '#8fbc8f',
+            'dark slate blue': '#483d8b', 'dark slate gray': '#2f4f4f', 'dark slate grey': '#2f4f4f', 'dark turquoise': '#00ced1',
+            'dark violet': '#9400d3', 'deep pink': '#ff1493', 'deep sky blue': '#00bfff', 'dim gray': '#696969',
+            'dim grey': '#696969', 'dodger blue': '#1e90ff', 'firebrick': '#b22222', 'floral white': '#fffaf0',
+            'forest green': '#228b22', 'fuchsia': '#ff00ff', 'gainsboro': '#dcdcdc', 'ghost white': '#f8f8ff',
+            'gold': '#ffd700', 'goldenrod': '#daa520', 'gray': '#808080', 'green': '#16A34A',
+            'green yellow': '#adff2f', 'grey': '#808080', 'honeydew': '#f0fff0', 'hot pink': '#ff69b4',
+            'indian red': '#cd5c5c', 'indigo': '#4b0082', 'ivory': '#fffff0', 'khaki': '#f0e68c',
+            'lavender': '#e6e6fa', 'lavender blush': '#fff0f5', 'lawn green': '#7cfc00', 'lemon chiffon': '#fffacd',
+            'light blue': '#add8e6', 'light coral': '#f08080', 'light cyan': '#e0ffff', 'light goldenrod yellow': '#fafad2',
+            'light gray': '#d3d3d3', 'light green': '#90ee90', 'light grey': '#d3d3d3', 'light pink': '#ffb6c1',
+            'light salmon': '#ffa07a', 'light sea green': '#20b2aa', 'light sky blue': '#87cefa', 'light slate gray': '#778899',
+            'light slate grey': '#778899', 'light steel blue': '#b0c4de', 'light yellow': '#ffffe0', 'lime': '#00ff00',
+            'lime green': '#32cd32', 'linen': '#faf0e6', 'magenta': '#ff00ff', 'maroon': '#800000',
+            'medium aquamarine': '#66cdaa', 'medium blue': '#0000cd', 'medium orchid': '#ba55d3', 'medium purple': '#9370db',
+            'medium sea green': '#3cb371', 'medium slate blue': '#7b68ee', 'medium spring green': '#00fa9a', 'medium turquoise': '#48d1cc',
+            'medium violet red': '#c71585', 'midnight blue': '#191970', 'mint cream': '#f5fffa', 'mint green': '#98ff98',
+            'misty rose': '#ffe4e1', 'moccasin': '#ffe4b5', 'navajo white': '#ffdead', 'navy': '#000080',
+            'old lace': '#fdf5e6', 'olive': '#808000', 'olive drab': '#6b8e23', 'orange': '#EA580C',
+            'orange red': '#ff4500', 'orchid': '#da70d6', 'pale goldenrod': '#eee8aa', 'pale green': '#98fb98',
+            'pale turquoise': '#afeeee', 'pale violet red': '#db7093', 'papaya whip': '#ffefd5', 'peach puff': '#ffdab9',
+            'peru': '#cd853f', 'pink': '#DB2777', 'plum': '#dda0dd', 'powder blue': '#b0e0e6',
+            'purple': '#7C3AED', 'rebecca purple': '#663399', 'red': '#DC2626', 'rosy brown': '#bc8f8f',
+            'royal blue': '#4169e1', 'saddle brown': '#8b4513', 'salmon': '#fa8072', 'sandy brown': '#f4a460',
+            'scarlet': '#ff2400', 'sea green': '#2e8b57', 'seashell': '#fff5ee', 'sienna': '#a0522d',
+            'silver': '#c0c0c0', 'sky blue': '#87ceeb', 'slate blue': '#6a5acd', 'slate gray': '#708090',
+            'slate grey': '#708090', 'snow': '#fffafa', 'spring green': '#00ff7f', 'steel blue': '#4682b4',
+            'tan': '#d2b48c', 'teal': '#0D9488', 'thistle': '#d8bfd8', 'tomato': '#ff6347',
+            'turquoise': '#40e0d0', 'violet': '#ee82ee', 'wheat': '#f5deb3', 'white': '#ffffff',
+            'white smoke': '#f5f5f5', 'yellow': '#FACC15', 'yellow green': '#9acd32', 'wine': '#722f37',
         };
         for (const [colorName, hex] of Object.entries(colorMap)) {
             if (text.includes(colorName)) {
@@ -166,9 +201,9 @@ export default function Canvas({ playerData, bossData, onComplete }) {
         }
 
         // ── FEATURE 3: Voice-Triggered Backdrops ──
-        for (const [keyword, query] of Object.entries(BACKDROP_MAP)) {
+        for (const [keyword, id] of Object.entries(BACKDROP_MAP)) {
             if (text.includes(keyword)) {
-                setBackdropUrl(`https://source.unsplash.com/1024x768/?${query}`);
+                setBackdropUrl(`https://picsum.photos/id/${id}/1600/900`);
                 setBackdropOpacity(0.2);
                 break;
             }
@@ -195,12 +230,16 @@ export default function Canvas({ playerData, bossData, onComplete }) {
 
         // Actions
         if (text.includes('clear') && !text.includes('clear effect') && !text.includes('clear background') && !text.includes('clear weather')) {
-            if (!isTimeUp && sigCanvas.current) sigCanvas.current.clear();
+            if (!isTimeUp) {
+                setElements([]);
+                // Clear the permanent canvas
+                const c = permanentCanvasRef.current;
+                if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+            }
         }
         if (text.includes('undo') || text.includes('go back') || text.includes('mistake') || text.includes('oops')) {
-            if (!isTimeUp && sigCanvas.current) {
-                const data = sigCanvas.current.toData();
-                if (data && data.length > 0) { data.pop(); sigCanvas.current.fromData(data); }
+            if (!isTimeUp) {
+                setElements(prev => prev.slice(0, prev.length - 1));
             }
         }
         if (text.includes('finish') || text.includes("i'm done") || text.includes('im done') || text.includes('submit') || text.includes('done')) {
@@ -210,27 +249,75 @@ export default function Canvas({ playerData, bossData, onComplete }) {
 
     const { transcript, isListening, toggleListening, startListening, stopListening } = useVoice(handleVoiceCommand);
 
-    // ── Init: start voice + volume ──
+    // ── Canvas sizing (only on mount + resize) ──
+    useEffect(() => {
+        const resizeCanvases = () => {
+            const container = canvasContainerRef.current;
+            if (!container) return;
+            const w = container.offsetWidth;
+            const h = container.offsetHeight;
+
+            [permanentCanvasRef, activeCanvasRef].forEach(ref => {
+                const c = ref.current;
+                if (c && (c.width !== w || c.height !== h)) {
+                    // Save current content
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = c.width;
+                    tempCanvas.height = c.height;
+                    tempCanvas.getContext('2d').drawImage(c, 0, 0);
+                    // Resize
+                    c.width = w;
+                    c.height = h;
+                    // Restore content
+                    c.getContext('2d').drawImage(tempCanvas, 0, 0);
+                }
+            });
+        };
+        resizeCanvases();
+        window.addEventListener('resize', resizeCanvases);
+        return () => window.removeEventListener('resize', resizeCanvases);
+    }, []);
+
+    // ── Helper: draw a path directly on a canvas context ──
+    const drawPathOnCtx = useCallback((ctx, points, color, width) => {
+        if (!ctx || points.length < 2) return;
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.moveTo(points[0][0], points[0][1]);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i][0], points[i][1]);
+        }
+        ctx.stroke();
+    }, []);
+
+    // ── Redraw all elements onto permanent canvas (used by undo/clear/demo) ──
+    const redrawPermanentCanvas = useCallback((els) => {
+        const canvas = permanentCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        els.forEach(el => {
+            drawPathOnCtx(ctx, el.points, el.color, el.width);
+        });
+    }, [drawPathOnCtx]);
+
+    // ── Init: start voice ──
     useEffect(() => {
         startListening();
-        startVolume();
-        sessionStartRef.current = Date.now();
-        return () => { stopListening(); stopVolume(); };
-    }, [startListening, stopListening, startVolume, stopVolume]);
 
-    // ── FEATURE 2: Volume → Shake + Stroke Boost ──
-    useEffect(() => {
-        if (isShouting) {
-            setShakeIntensity(Math.min(volume * 20, 12));
-            // Temporarily boost stroke thickness when yelling
-            setStrokeWidth(prev => ({
-                min: Math.min(prev.min + volume * 3, 10),
-                max: Math.min(prev.max + volume * 4, 18),
-            }));
-        } else {
-            setShakeIntensity(0);
-        }
-    }, [volume, isShouting]);
+        // Lower background music volume while drawing so mic works better
+        audioSystem.setMusicVolume(0.03);
+
+        sessionStartRef.current = Date.now();
+        return () => {
+            stopListening();
+            // Restore background music volume when leaving canvas
+            audioSystem.setMusicVolume(0.4);
+        };
+    }, [startListening, stopListening]);
 
     // ── FEATURE 1: Particle system loop ──
     useEffect(() => {
@@ -254,7 +341,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
             // Spawn new particles if effect is active and pointer is down
             if (activeEffect && pointerRef.current.active && PARTICLE_PRESETS[activeEffect]) {
                 const preset = PARTICLE_PRESETS[activeEffect];
-                const count = 3 + Math.floor(volume * 8); // More particles when louder
+                const count = 5; // Fixed particle count
                 for (let i = 0; i < count; i++) {
                     particlesRef.current.push({
                         x: pointerRef.current.x + (Math.random() - 0.5) * preset.spread,
@@ -307,30 +394,90 @@ export default function Canvas({ playerData, bossData, onComplete }) {
             cancelAnimationFrame(particleRafRef.current);
             window.removeEventListener('resize', resizeCanvas);
         };
-    }, [activeEffect, volume]);
+    }, [activeEffect]);
 
-    // Track pointer position for particle spawning
+    // Track pointer position for drawing + particle spawning
     const handlePointerMove = (e) => {
         const container = canvasContainerRef.current;
-        if (!container) return;
+        if (!container || isTimeUp) return;
         const rect = container.getBoundingClientRect();
-        pointerRef.current.x = e.clientX - rect.left;
-        pointerRef.current.y = e.clientY - rect.top;
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        pointerRef.current.x = x;
+        pointerRef.current.y = y;
+
+        if (isDrawingRef.current) {
+            currentPathRef.current.push([x, y]);
+
+            // Draw live stroke on the active (temporary) canvas
+            const activeCanvas = activeCanvasRef.current;
+            if (activeCanvas) {
+                const ctx = activeCanvas.getContext('2d');
+                ctx.clearRect(0, 0, activeCanvas.width, activeCanvas.height);
+                const w = strokeWidth.min + ((strokeWidth.max - strokeWidth.min) / 2);
+                drawPathOnCtx(ctx, currentPathRef.current, isErasing ? '#ffffff' : penColor, w);
+            }
+        }
     };
+
     const handlePointerDown = (e) => {
+        if (isTimeUp) return;
         pointerRef.current.active = true;
-        handlePointerMove(e);
+        isDrawingRef.current = true;
+        setIsDrawing(true);
+
+        const container = canvasContainerRef.current;
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        currentPathRef.current = [[x, y]];
 
         // FEATURE 4: Record stroke timestamp
         strokeTimelineRef.current.push({
             type: 'down',
             time: Date.now() - sessionStartRef.current,
-            x: pointerRef.current.x,
-            y: pointerRef.current.y,
+            x, y,
+            color: isErasing ? '#ffffff' : penColor,
+            width: strokeWidth.min,
         });
     };
+
     const handlePointerUp = () => {
+        if (isTimeUp) return;
         pointerRef.current.active = false;
+
+        if (isDrawingRef.current) {
+            isDrawingRef.current = false;
+            setIsDrawing(false);
+
+            // "Stamp" the completed stroke onto the permanent canvas
+            if (currentPathRef.current.length > 0) {
+                const permCanvas = permanentCanvasRef.current;
+                if (permCanvas) {
+                    const ctx = permCanvas.getContext('2d');
+                    const w = strokeWidth.min + ((strokeWidth.max - strokeWidth.min) / 2);
+                    drawPathOnCtx(ctx, currentPathRef.current, isErasing ? '#ffffff' : penColor, w);
+                }
+
+                // Save to elements for undo/export
+                setElements(prev => [...prev, {
+                    points: [...currentPathRef.current],
+                    color: isErasing ? '#ffffff' : penColor,
+                    width: strokeWidth.min + ((strokeWidth.max - strokeWidth.min) / 2),
+                    isErasing
+                }]);
+            }
+
+            // Clear the temporary active canvas
+            const activeCanvas = activeCanvasRef.current;
+            if (activeCanvas) {
+                activeCanvas.getContext('2d').clearRect(0, 0, activeCanvas.width, activeCanvas.height);
+            }
+            currentPathRef.current = [];
+        }
+
         strokeTimelineRef.current.push({
             type: 'up',
             time: Date.now() - sessionStartRef.current,
@@ -344,34 +491,72 @@ export default function Canvas({ playerData, bossData, onComplete }) {
             return () => clearTimeout(id);
         } else if (timeLeft === 0 && !isTimeUp) {
             setIsTimeUp(true);
-            if (sigCanvas.current) sigCanvas.current.off();
+            setIsDrawing(false);
+            pointerRef.current.active = false;
             setTimeout(() => handleComplete(), 2000);
         }
     }, [timeLeft, isTimeUp]);
 
-    const handleComplete = () => {
-        if (sigCanvas.current) {
-            const base64Data = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
+    const handleComplete = async () => {
+        if (drawCanvasRef.current) {
+            const base64Data = drawCanvasRef.current.toDataURL('image/png');
             // Also capture the particle canvas for composite
             let particleData = null;
             if (particleCanvasRef.current) {
                 particleData = particleCanvasRef.current.toDataURL('image/png');
             }
+
+            // Parse the voice transcript with Groq/Llama to separate
+            // drawing commands from creative character descriptions
+            let parsedTranscript = {
+                description: transcript.trim() || playerData.battleCry,
+                lore: ''
+            };
+
+            if (transcript.trim()) {
+                try {
+                    const resp = await fetch('http://localhost:5000/api/parse-transcript', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            transcript: transcript.trim(),
+                            heroName: playerData.name,
+                            bossName: bossData?.name || 'Boss',
+                        }),
+                    });
+                    if (resp.ok) {
+                        parsedTranscript = await resp.json();
+                    }
+                } catch (err) {
+                    console.error('Transcript parsing failed, using raw:', err);
+                }
+            }
+
             onComplete({
                 drawing: base64Data,
                 particleOverlay: particleData,
-                voiceDescription: transcript.trim() || playerData.battleCry,
+                voiceDescription: parsedTranscript.description || transcript.trim() || playerData.battleCry,
+                characterLore: parsedTranscript.lore || '',
+                rawTranscript: transcript.trim(),
                 strokeTimeline: strokeTimelineRef.current,
-                drawingData: sigCanvas.current.toData(),
+                elementsData: elements,
             });
         }
     };
 
-    const handleClear = () => { if (!isTimeUp && sigCanvas.current) sigCanvas.current.clear(); };
+    const handleClear = () => {
+        if (!isTimeUp) {
+            setElements([]);
+            redrawPermanentCanvas([]);
+        }
+    };
     const handleUndo = () => {
-        if (!isTimeUp && sigCanvas.current) {
-            const data = sigCanvas.current.toData();
-            if (data && data.length > 0) { data.pop(); sigCanvas.current.fromData(data); }
+        if (!isTimeUp) {
+            setElements(prev => {
+                const newEls = prev.slice(0, prev.length - 1);
+                redrawPermanentCanvas(newEls);
+                return newEls;
+            });
         }
     };
     const toggleEraserFn = () => {
@@ -453,39 +638,22 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                         </div>
                     )}
 
-                    {/* Volume meter */}
-                    <div className="flex items-center gap-2">
-                        <div style={{
-                            width: '60px', height: '8px', borderRadius: '4px',
-                            background: 'rgba(255,255,255,0.1)',
-                            overflow: 'hidden',
+                    {/* Timer pill */}
+                    <div style={{
+                        padding: '8px 0', borderRadius: '16px',
+                        minWidth: '110px', textAlign: 'center',
+                        background: timeLeft <= 30 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)',
+                        border: `2px solid ${timeLeft <= 30 ? '#ef4444' : activeColor + '80'}`,
+                        boxShadow: `0 0 20px ${timeLeft <= 30 ? 'rgba(239,68,68,0.3)' : activeColor + '30'}`,
+                        transform: timeLeft <= 10 ? (timeLeft % 2 === 0 ? 'scale(1.05) rotate(2deg)' : 'scale(1.05) rotate(-2deg)') : 'none',
+                        transition: 'transform 0.2s',
+                    }}>
+                        <span style={{
+                            fontFamily: "'Mansalva', cursive", fontSize: '2.2rem',
+                            color: timeLeft <= 30 ? '#ef4444' : '#fff', lineHeight: 1,
                         }}>
-                            <div style={{
-                                width: `${Math.min(volume * 200, 100)}%`, height: '100%',
-                                background: isShouting
-                                    ? 'linear-gradient(90deg, #ef4444, #ff6b35)'
-                                    : `linear-gradient(90deg, ${activeColor}80, ${activeColor})`,
-                                borderRadius: '4px',
-                                transition: 'width 0.1s, background 0.15s',
-                            }} />
-                        </div>
-
-                        {/* Timer pill */}
-                        <div style={{
-                            padding: '8px 24px', borderRadius: '16px',
-                            background: timeLeft <= 30 ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.08)',
-                            border: `2px solid ${timeLeft <= 30 ? '#ef4444' : activeColor + '80'}`,
-                            boxShadow: `0 0 20px ${timeLeft <= 30 ? 'rgba(239,68,68,0.3)' : activeColor + '30'}`,
-                            transform: timeLeft <= 10 ? (timeLeft % 2 === 0 ? 'scale(1.05) rotate(2deg)' : 'scale(1.05) rotate(-2deg)') : 'none',
-                            transition: 'transform 0.2s',
-                        }}>
-                            <span style={{
-                                fontFamily: "'Mansalva', cursive", fontSize: '2.2rem',
-                                color: timeLeft <= 30 ? '#ef4444' : '#fff', lineHeight: 1,
-                            }}>
-                                {fmt(timeLeft)}
-                            </span>
-                        </div>
+                            {fmt(timeLeft)}
+                        </span>
                     </div>
                 </div>
 
@@ -537,13 +705,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                             background: '#fff',
                             border: `3px solid ${activeColor}60`,
                             boxShadow: `0 0 40px ${activeColor}20, 0 8px 32px rgba(0,0,0,0.4)`,
-                            // FEATURE 2: Volume shake
-                            transform: shakeIntensity > 0
-                                ? `translate(${(Math.random() - 0.5) * shakeIntensity}px, ${(Math.random() - 0.5) * shakeIntensity}px)`
-                                : 'none',
-                            transition: shakeIntensity > 0 ? 'none' : 'transform 0.2s',
                         }}
-                        onDoubleClick={toggleEraserFn}
                         onPointerMove={handlePointerMove}
                         onPointerDown={handlePointerDown}
                         onPointerUp={handlePointerUp}
@@ -576,9 +738,9 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                                                 position: 'absolute',
                                                 left: `${Math.random() * 100}%`,
                                                 top: `-${Math.random() * 20}%`,
-                                                width: '1px', height: `${12 + Math.random() * 18}px`,
-                                                background: 'rgba(100,150,220,0.4)',
-                                                animation: `rain-fall ${0.5 + Math.random() * 0.5}s linear ${Math.random() * 1}s infinite`,
+                                                width: '2px', height: `${15 + Math.random() * 20}px`,
+                                                background: 'rgba(200,220,255,0.8)',
+                                                animation: `rain-fall ${0.4 + Math.random() * 0.4}s linear ${Math.random() * 1}s infinite`,
                                             }} />
                                         ))}
                                     </div>
@@ -621,15 +783,18 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                             </div>
                         )}
 
-                        {/* The actual drawing canvas */}
-                        <SignatureCanvas
-                            ref={sigCanvas}
-                            penColor={penColor}
-                            canvasProps={{ className: 'w-full h-full cursor-crosshair', style: { position: 'relative', zIndex: 2 } }}
-                            velocityFilterWeight={0.7}
-                            minWidth={strokeWidth.min}
-                            maxWidth={strokeWidth.max}
-                            backgroundColor="rgba(0,0,0,0)"
+                        {/* Permanent canvas for completed strokes */}
+                        <canvas
+                            ref={permanentCanvasRef}
+                            className="absolute inset-0 w-full h-full touch-none"
+                            style={{ zIndex: 1 }}
+                        />
+
+                        {/* Active canvas for the current live stroke */}
+                        <canvas
+                            ref={activeCanvasRef}
+                            className="absolute inset-0 w-full h-full cursor-crosshair touch-none pointer-events-none"
+                            style={{ zIndex: 2 }}
                         />
 
                         {/* FEATURE 1: Particle overlay canvas */}
@@ -639,14 +804,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                             style={{ zIndex: 3 }}
                         />
 
-                        {/* Voice-shouting border glow */}
-                        {isShouting && (
-                            <div className="absolute inset-0 pointer-events-none" style={{
-                                zIndex: 4,
-                                boxShadow: `inset 0 0 ${30 + volume * 60}px ${activeColor}60`,
-                                transition: 'box-shadow 0.1s',
-                            }} />
-                        )}
+
                     </div>
                 </div>
 
@@ -665,7 +823,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                             style={{ animation: isListening ? 'pulse-glow 1.5s infinite' : 'none' }}>
                             <LuMic size={20} />
                         </div>
-                        <div className="flex-1 overflow-hidden">
+                        <div className="flex-1 overflow-hidden" style={{ minWidth: 0 }}>
                             <p style={{
                                 fontFamily: "'Comic Relief', serif", fontSize: '0.6rem',
                                 color: 'rgba(255,255,255,0.4)', marginBottom: '2px',
@@ -676,12 +834,18 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                                         : 'Say "fire", "ice", "lightning", "magic", "city", "forest"...'
                                     : 'Voice paused'}
                             </p>
-                            <p className="truncate" style={{
-                                fontFamily: "'Inter', sans-serif", fontSize: '0.85rem',
-                                color: '#fff', fontStyle: transcript ? 'normal' : 'italic', opacity: transcript ? 1 : 0.4,
-                            }}>
-                                {transcript || '"Give me fire and put me in a ruined city..."'}
-                            </p>
+                            <div className="w-full overflow-hidden relative" style={{ height: '1.25rem' }}>
+                                <p style={{
+                                    fontFamily: "'Inter', sans-serif", fontSize: '0.85rem',
+                                    color: '#fff', fontStyle: transcript ? 'normal' : 'italic', opacity: transcript ? 1 : 0.4,
+                                    whiteSpace: 'nowrap', position: 'absolute', right: 0,
+                                    direction: 'rtl', textAlign: 'left',
+                                }}>
+                                    <span style={{ direction: 'ltr', unicodeBidi: 'bidi-override' }}>
+                                        {transcript || '"Give me fire and put me in a ruined city..."'}
+                                    </span>
+                                </p>
+                            </div>
                         </div>
                         <button onClick={toggleListening}
                             className="px-3 py-1.5 rounded-lg text-xs transition-colors hover:bg-white/10 shrink-0"
@@ -693,6 +857,20 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                             {isListening ? 'Pause' : 'Resume'}
                         </button>
                     </div>
+
+                    {/* Demo Button - Visible for quick testing */}
+                    <button onClick={() => {
+                        // Secret demo drawing (a huge rough "dragon" sketch outline)
+                        setElements([
+                            { color: activeColor, width: 3, points: [[500, 200], [450, 150], [400, 180], [380, 250], [420, 300], [480, 350], [550, 300], [520, 220]] },
+                            { color: activeColor, width: 3, points: [[380, 250], [300, 300], [250, 350], [200, 450], [300, 400], [420, 300]] },
+                            { color: activeColor, width: 3, points: [[550, 300], [650, 350], [750, 450], [600, 400], [480, 350]] },
+                            { color: '#ef4444', width: 6, points: [[420, 190], [430, 195], [440, 190]] }, // Eye
+                            { color: activeColor, width: 2, points: [[350, 200], [300, 150], [320, 180]] }, // Horns
+                        ]);
+                    }} className="absolute bottom-4 left-4 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1 rounded-md z-50 border border-white/20 transition-colors">
+                        Demo
+                    </button>
 
                     {/* Forge Legend */}
                     <button onClick={handleComplete} disabled={isTimeUp}
