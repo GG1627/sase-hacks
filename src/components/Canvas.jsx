@@ -398,6 +398,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
 
     // Track pointer position for drawing + particle spawning
     const handlePointerMove = (e) => {
+        e.preventDefault();
         const container = canvasContainerRef.current;
         if (!container || isTimeUp) return;
         const rect = container.getBoundingClientRect();
@@ -423,6 +424,8 @@ export default function Canvas({ playerData, bossData, onComplete }) {
 
     const handlePointerDown = (e) => {
         if (isTimeUp) return;
+        e.preventDefault();
+        e.target.setPointerCapture(e.pointerId);
         pointerRef.current.active = true;
         isDrawingRef.current = true;
         setIsDrawing(true);
@@ -499,22 +502,27 @@ export default function Canvas({ playerData, bossData, onComplete }) {
 
     const handleComplete = async () => {
         if (drawCanvasRef.current) {
+            console.log('[Canvas] handleComplete triggered');
             const base64Data = drawCanvasRef.current.toDataURL('image/png');
+            console.log('[Canvas] Drawing exported, base64 length:', base64Data.length);
             // Also capture the particle canvas for composite
             let particleData = null;
             if (particleCanvasRef.current) {
                 particleData = particleCanvasRef.current.toDataURL('image/png');
             }
 
-            // Parse the voice transcript with Groq/Llama to separate
+            // Parse the voice transcript with Gemini to separate
             // drawing commands from creative character descriptions
             let parsedTranscript = {
                 description: transcript.trim() || playerData.battleCry,
                 lore: ''
             };
 
+            console.log('[Canvas] Raw transcript:', JSON.stringify(transcript.trim()).slice(0, 200));
+
             if (transcript.trim()) {
                 try {
+                    console.log('[Canvas] Sending transcript to /api/parse-transcript…');
                     const resp = await fetch('http://localhost:5000/api/parse-transcript', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -526,13 +534,19 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                     });
                     if (resp.ok) {
                         parsedTranscript = await resp.json();
+                        console.log('[Canvas] ✅ Transcript parsed:', JSON.stringify(parsedTranscript).slice(0, 300));
+                    } else {
+                        const errBody = await resp.text();
+                        console.error('[Canvas] ❌ Transcript parse API returned', resp.status, errBody);
                     }
                 } catch (err) {
-                    console.error('Transcript parsing failed, using raw:', err);
+                    console.error('[Canvas] ❌ Transcript parse fetch failed:', err.message);
                 }
+            } else {
+                console.log('[Canvas] No transcript to parse (empty), using battleCry fallback');
             }
 
-            onComplete({
+            const result = {
                 drawing: base64Data,
                 particleOverlay: particleData,
                 voiceDescription: parsedTranscript.description || transcript.trim() || playerData.battleCry,
@@ -540,7 +554,14 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                 rawTranscript: transcript.trim(),
                 strokeTimeline: strokeTimelineRef.current,
                 elementsData: elements,
+            };
+            console.log('[Canvas] Calling onComplete with:', {
+                drawingLen: result.drawing.length,
+                voiceDescription: result.voiceDescription?.slice(0, 80),
+                characterLore: result.characterLore?.slice(0, 80),
+                hasRawTranscript: !!result.rawTranscript,
             });
+            onComplete(result);
         }
     };
 
@@ -658,7 +679,7 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                 </div>
 
                 {/* ── Main row: Tools + Canvas ── */}
-                <div className="w-full max-w-4xl flex gap-4" style={{ height: '52vh' }}>
+                <div className="w-full max-w-4xl flex gap-4" style={{ height: '45vh' }}>
 
                     {/* Toolbar */}
                     <div className="flex flex-col gap-3 shrink-0">
@@ -705,11 +726,13 @@ export default function Canvas({ playerData, bossData, onComplete }) {
                             background: '#fff',
                             border: `3px solid ${activeColor}60`,
                             boxShadow: `0 0 40px ${activeColor}20, 0 8px 32px rgba(0,0,0,0.4)`,
+                            touchAction: 'none',
                         }}
                         onPointerMove={handlePointerMove}
                         onPointerDown={handlePointerDown}
                         onPointerUp={handlePointerUp}
                         onPointerLeave={handlePointerUp}
+                        onPointerCancel={handlePointerUp}
                     >
                         {/* FEATURE 3: Backdrop image behind drawing */}
                         {backdropUrl && (

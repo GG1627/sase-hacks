@@ -8,7 +8,7 @@ class AudioEngine {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.bgMusic = new Audio(bgMusicUrl);
         this.bgMusic.loop = true;
-        this.bgMusic.volume = 2.8; // Default menu volume
+        this.bgMusic.volume = 0.5; // Default menu volume (must be 0–1)
         this.bgMusicStarted = false;
 
         // Backup: force replay if loop doesn't work
