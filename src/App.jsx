@@ -5,6 +5,7 @@ import BossSelect from './components/BossSelect';
 import Canvas from './components/Canvas';
 import OriginStory from './components/OriginStory';
 import BattleScreen from './components/BattleScreen';
+import Gallery from './components/Gallery';
 import { audioSystem } from './utils/audio';
 
 export default function App() {
@@ -104,9 +105,7 @@ export default function App() {
       )}
 
       {currentScreen === 'gallery' && (
-        <div className="screen-placeholder">
-          <h1>GALLERY</h1>
-        </div>
+        <Gallery onBack={() => setCurrentScreen('home')} />
       )}
     </div>
   );

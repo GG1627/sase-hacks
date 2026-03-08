@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateSpeechUrl } from '../services/elevenlabs';
 import { audioSystem } from '../utils/audio';
+import { uploadDrawingToCloudinary } from '../services/cloudinary';
+import { createBattle } from '../services/db';
 import { GiCrown, GiCrossedSwords } from 'react-icons/gi';
 import { HiHome } from 'react-icons/hi';
 import rumbleAudio from '../audios/rumble.mp3';
@@ -159,6 +161,8 @@ export default function BattleScreen({
         }
     }, [phase, videoDataUrl, commentaryAudioUrl]);
 
+    const hasSavedRef = useRef(false);
+
     /* ── When verdict phase starts ── */
     useEffect(() => {
         if (phase === 'verdict') {
@@ -175,6 +179,46 @@ export default function BattleScreen({
                 verdictAudioRef.current.src = verdictAudioUrl;
                 verdictAudioRef.current.volume = 0.9;
                 verdictAudioRef.current.play().catch(e => console.error('[BattleScreen] Verdict play failed:', e));
+            }
+
+            // Save to gallery (fire and forget)
+            if (!hasSavedRef.current) {
+                hasSavedRef.current = true;
+                (async () => {
+                    try {
+                        console.log('[BattleScreen] Saving battle to gallery…');
+                        // Upload drawing + hero image to Cloudinary in parallel
+                        const [drawingUrl, heroImageUrl] = await Promise.all([
+                            heroData?.drawing
+                                ? uploadDrawingToCloudinary(heroData.drawing).catch(e => { console.error('[Gallery] Drawing upload failed:', e); return null; })
+                                : null,
+                            heroImage
+                                ? uploadDrawingToCloudinary(heroImage).catch(e => { console.error('[Gallery] Hero image upload failed:', e); return null; })
+                                : null,
+                        ]);
+
+                        const battleData = {
+                            heroName: heroData?.name || 'Hero',
+                            heroColor: heroData?.color || '#ffffff',
+                            bossName: bossData?.name || 'Boss',
+                            bossImage: bossData?.image || null,
+                            drawingUrl,
+                            heroImageUrl,
+                            winner: battleResult?.winner || 'hero',
+                            winnerName,
+                            battleNarrative: battleResult?.battleNarrative || '',
+                            winnerVerdict: battleResult?.winnerVerdict || '',
+                            winnerReason: battleResult?.winnerReason || '',
+                            fightCommentary: battleResult?.fightCommentary || '',
+                            characterLore: heroData?.characterLore || '',
+                        };
+
+                        const id = await createBattle(battleData);
+                        console.log('[BattleScreen] ✅ Saved to gallery, id:', id);
+                    } catch (err) {
+                        console.error('[BattleScreen] ❌ Gallery save failed:', err);
+                    }
+                })();
             }
         }
     }, [phase, verdictAudioUrl]);

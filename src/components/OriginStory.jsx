@@ -79,7 +79,7 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
                     winnerReason: `${heroData.name} overwhelmed the opponent with sheer determination.`,
                     battleNarrative: `In a clash of epic proportions, ${heroData.name} faced ${bossData.name} in a battle that shook the heavens. Despite overwhelming odds, the hero's raw power and unbreakable will proved too much. Victory was claimed in a final devastating strike.`,
                     winnerVerdict: `${heroData.name} is victorious!`,
-                    videoPrompt: `Epic anime duel: ${heroData.name} and ${bossData.name} dashing at superhuman speed, energy auras clashing mid-air with massive shockwave explosions, rapid cuts between both characters leaping and charging energy waves. Dragon Ball Z style, ufotable quality, dynamic camera.`,
+                    videoPrompt: `Anime style showdown: ${heroData.name} and ${bossData.name} face each other with glowing energy auras, leaping gracefully through the air, colorful magical beams of light swirling between them, dramatic wind and sparkles, Studio Ghibli quality, vibrant particle effects, dynamic swooping camera.`,
                     imagePrompt: `High-quality anime style character portrait, Studio Ghibli, highly detailed anime aesthetic: ${heroData.characterLore || heroData.voiceDescription || heroData.name}.`,
                 };
                 console.log('[OriginStory] Using fallback battle result');
@@ -112,7 +112,7 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
                     setHeroImage(data.image);
 
                     // 🎬 As soon as we have the image, kick off video generation (image-to-video)
-                    const videoPrompt = battle.videoPrompt || `Epic anime duel: ${heroData.name} and ${bossData.name} dashing at superhuman speed, energy auras clashing mid-air with massive explosions, leaping and charging energy waves. Dragon Ball Z style, ufotable quality, dynamic camera.`;
+                    const videoPrompt = battle.videoPrompt || `Anime style showdown: ${heroData.name} and ${bossData.name} face each other with glowing energy auras, leaping gracefully through the air, colorful magical beams of light swirling between them, dramatic wind and sparkles, Studio Ghibli quality, vibrant particle effects, dynamic swooping camera.`;
                     console.log('[OriginStory] Step D: Starting video with image-to-video…');
                     setStatusText('Preparing the battlefield…');
 
