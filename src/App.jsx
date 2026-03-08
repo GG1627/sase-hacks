@@ -8,7 +8,6 @@ import BattleScreen from './components/BattleScreen';
 import { audioSystem } from './utils/audio';
 
 export default function App() {
-  const [entered, setEntered] = useState(false);
   const [currentScreen, setCurrentScreen] = useState('home');
   const [heroData, setHeroData] = useState(null);
   const [bossData, setBossData] = useState(null);
@@ -57,34 +56,14 @@ export default function App() {
     }
   };
 
-  if (!entered) {
-    return (
-      <div
-        onClick={() => {
-          audioSystem.startBackgroundMusic();
-          setEntered(true);
-        }}
-        className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center cursor-pointer transition-opacity duration-1000"
-      >
-        <p style={{
-          fontFamily: "'Comic Relief', serif",
-          fontSize: '1rem',
-          color: 'rgba(255,255,255,0.5)',
-          letterSpacing: '0.2em',
-          textTransform: 'uppercase',
-          animation: 'pulse-glow 2.5s infinite ease-in-out'
-        }}>
-          Click anywhere to continue
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="app">
       {currentScreen === 'home' && (
         <HomeScreen
-          onStart={() => setCurrentScreen('hero-setup')}
+          onStart={() => {
+            audioSystem.startBackgroundMusic();
+            setCurrentScreen('hero-setup');
+          }}
           onGallery={() => setCurrentScreen('gallery')}
         />
       )}

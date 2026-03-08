@@ -6,8 +6,9 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   server: {
-    allowedHosts: [
-      'precrystalline-monotrichate-dimple.ngrok-free.dev'
-    ]
+    host: true,
+    proxy: {
+      '/api': 'http://localhost:5000',
+    },
   }
 })

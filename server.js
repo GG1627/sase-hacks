@@ -2,8 +2,12 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors());
@@ -442,6 +446,9 @@ app.post('/api/generate-video', async (req, res) => {
         res.status(500).json({ error: 'Failed to generate video: ' + error.message });
     }
 });
+
+// Serve the Vite production build
+app.use(express.static(path.join(__dirname, 'dist')));
 
 const PORT = 5000;
 app.listen(PORT, () => console.log(`🚀 API Server running on http://localhost:${PORT}`));

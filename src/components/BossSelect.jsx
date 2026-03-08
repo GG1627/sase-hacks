@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import heroBg from '../assets/hero_bg.png';
+import heroBg from '../assets/hero_bg.avif';
 import gokuImg from '../assets/goku.avif';
 import zoroImg from '../assets/zoro.avif';
 import powerImg from '../assets/power.avif';

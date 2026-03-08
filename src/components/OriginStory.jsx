@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { generateSpeechUrl } from '../services/elevenlabs';
 import { audioSystem } from '../utils/audio';
-import originBg from '../assets/origin_bg.png';
+import originBg from '../assets/origin_bg.avif';
 
 // ─── Voice IDs ───
 // Brian: Deep, Resonant and Comforting — premade (free-tier)
@@ -34,6 +34,13 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
     const hasStartedVideo = useRef(false);
     const allDone = useRef(false);
 
+    // Register audio element for iOS unlock
+    useEffect(() => {
+        const el = audioRef.current;
+        if (el) audioSystem.registerAudio(el);
+        return () => { if (el) audioSystem.unregisterAudio(el); };
+    }, []);
+
     /* ── 1. kick off the pipeline on mount ── */
     useEffect(() => {
         let cancelled = false;
@@ -53,7 +60,7 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
             try {
                 setStatusText('Summoning the Battle Judge…');
                 console.log('[OriginStory] Step A: Calling /api/generate-battle…');
-                const battleRes = await fetch('http://localhost:5000/api/generate-battle', {
+                const battleRes = await fetch('/api/generate-battle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ heroData, bossData }),
@@ -88,7 +95,7 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
 
             let generatedImageDataUrl = null;
 
-            const imagePromise = fetch('http://localhost:5000/api/generate-image', {
+            const imagePromise = fetch('/api/generate-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt: imagePrompt }),
@@ -109,7 +116,7 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
                     console.log('[OriginStory] Step D: Starting video with image-to-video…');
                     setStatusText('Preparing the battlefield…');
 
-                    fetch('http://localhost:5000/api/generate-video', {
+                    fetch('/api/generate-video', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ prompt: videoPrompt, image: data.image }),
@@ -163,9 +170,12 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
             if (narrationUrl && audioRef.current) {
                 audioRef.current.src = narrationUrl;
                 audioRef.current.volume = 0.85;
-                audioRef.current.play().catch((e) => {
-                    console.error('[OriginStory] Audio play failed:', e.message);
-                });
+                // Small delay to let iOS settle after unlock
+                setTimeout(() => {
+                    audioRef.current.play().catch((e) => {
+                        console.error('[OriginStory] Audio play failed:', e.message);
+                    });
+                }, 100);
 
                 audioRef.current.onended = () => {
                     console.log('[OriginStory] Narration ended, video ready:', !!(videoDataUrl || allDone.current));
@@ -298,6 +308,8 @@ export default function OriginStory({ heroData, bossData, onBattleReady }) {
                     </p>
                 </div>
             )}
+
+
 
             {/* ── REVEAL PHASE ── */}
             {(phase === 'reveal' || phase === 'waiting') && (

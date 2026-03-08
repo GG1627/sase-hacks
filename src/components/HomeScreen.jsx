@@ -1,13 +1,13 @@
-import heroBg from '../assets/hero_bg.png';
-import { LuPencil, LuZap, LuFilm, LuCrown } from 'react-icons/lu';
+import heroBg from '../assets/hero_bg.avif';
+import { LuHand, LuZap, LuFilm, LuCrown, LuMic } from 'react-icons/lu';
 import { GiCrossedSwords } from 'react-icons/gi';
 
 // Each icon gets a slight random tilt + staggered float delay
 const ICONS = [
-    { Icon: LuPencil, rotate: '-12deg', top: '9%', left: '8%', delay: '0s' },
+    { Icon: LuHand, rotate: '-12deg', top: '9%', left: '8%', delay: '0s' },
     { Icon: GiCrossedSwords, rotate: '6deg', top: '7%', left: '22%', delay: '0.4s' },
     { Icon: LuZap, rotate: '-5deg', top: '11%', left: '45%', delay: '0.8s' },
-    { Icon: LuFilm, rotate: '10deg', top: '6%', left: '68%', delay: '0.2s' },
+    { Icon: LuMic, rotate: '10deg', top: '6%', left: '68%', delay: '0.2s' },
     { Icon: LuCrown, rotate: '-8deg', top: '10%', left: '88%', delay: '0.6s' },
 ];
 
@@ -138,9 +138,10 @@ export default function HomeScreen({ onStart, onGallery }) {
                         transform: 'rotate(-1deg)',
                     }}
                 >
-                    Scribble a hero. Shout their power.<br />
-                    Watch them DESTROY each other.
+                    Draw in the air. Voice their power.<br />
+                    Watch them BATTLE.
                 </p>
+
 
                 {/* Buttons — slightly tilted opposite ways */}
                 <div className="flex gap-6 mt-4">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import heroBg from '../assets/hero_bg.png';
+import heroBg from '../assets/hero_bg.avif';
 import { LuPencil, LuZap, LuCrown, LuFlame } from 'react-icons/lu';
 import { GiCrossedSwords } from 'react-icons/gi';
 

@@ -10,12 +10,50 @@ class AudioEngine {
         this.bgMusic.loop = true;
         this.bgMusic.volume = 0.5; // Default menu volume (must be 0–1)
         this.bgMusicStarted = false;
+        this._audioElements = [];
 
         // Backup: force replay if loop doesn't work
         this.bgMusic.addEventListener('ended', () => {
             this.bgMusic.currentTime = 0;
             this.bgMusic.play().catch(() => { });
         });
+    }
+
+    // Register an <audio> element so it can be pre-unlocked on iOS
+    registerAudio(el) {
+        if (el && !this._audioElements.includes(el)) {
+            this._audioElements.push(el);
+        }
+    }
+
+    // Unregister when component unmounts
+    unregisterAudio(el) {
+        this._audioElements = this._audioElements.filter(e => e !== el);
+    }
+
+    // Call during a user gesture to unlock all registered audio elements on iOS
+    unlockAllAudio() {
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+        // Play+pause a tiny silent blip on every registered <audio> to unlock it
+        for (const el of this._audioElements) {
+            const prev = el.src;
+            el.muted = true;
+            el.play().then(() => {
+                el.pause();
+                el.muted = false;
+                el.currentTime = 0;
+            }).catch(() => {
+                el.muted = false;
+            });
+        }
+        // Also unlock bgMusic
+        if (!this.bgMusicStarted) {
+            this.bgMusic.play().then(() => {
+                this.bgMusicStarted = true;
+            }).catch(() => {});
+        }
     }
 
     resume() {

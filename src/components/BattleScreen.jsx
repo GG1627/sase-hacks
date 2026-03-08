@@ -4,7 +4,7 @@ import { audioSystem } from '../utils/audio';
 import { GiCrown, GiCrossedSwords } from 'react-icons/gi';
 import { HiHome } from 'react-icons/hi';
 import rumbleAudio from '../audios/rumble.mp3';
-import winnerBg from '../assets/winner.png';
+import winnerBg from '../assets/winner.avif';
 
 // Harry: Fierce Warrior — dramatic battle announcer
 const ANNOUNCER_VOICE = 'SOYHLrjzK2X1ezoPC6cr';
@@ -43,6 +43,11 @@ export default function BattleScreen({
     const isHeroWinner = battleResult?.winner === 'hero';
     const winnerName = isHeroWinner ? heroData.name : bossData.name;
 
+    /* ── Resume AudioContext (user already interacted on earlier screens) ── */
+    useEffect(() => {
+        audioSystem.resume();
+    }, []);
+
     /* ── Pre-generate verdict audio on mount ── */
     useEffect(() => {
         audioSystem.setMusicVolume(0.04);
@@ -69,11 +74,32 @@ export default function BattleScreen({
         // Duck music during rumble
         audioSystem.setMusicVolume(0);
 
-        // Play the rumble audio
-        if (rumbleAudioRef.current) {
-            rumbleAudioRef.current.volume = 1.0;
-            rumbleAudioRef.current.play().catch(() => {});
-            rumbleAudioRef.current.onended = () => setPhase('video');
+        const el = rumbleAudioRef.current;
+        if (el) {
+            el.volume = 1.0;
+            el.onended = () => {
+                console.log('[BattleScreen] Rumble audio ended → video phase');
+                setPhase('video');
+            };
+
+            const playRumble = () => {
+                console.log('[BattleScreen] Playing rumble audio (readyState:', el.readyState, ')');
+                el.play()
+                    .then(() => console.log('[BattleScreen] ✅ Rumble playing'))
+                    .catch(e => {
+                        console.error('[BattleScreen] ❌ Rumble play failed:', e);
+                        setTimeout(() => setPhase('video'), 500);
+                    });
+            };
+
+            // Wait for audio data to be ready before playing
+            if (el.readyState >= 2) {
+                playRumble();
+            } else {
+                console.log('[BattleScreen] Waiting for rumble to load (readyState:', el.readyState, ')…');
+                el.addEventListener('canplay', playRumble, { once: true });
+                el.load();
+            }
         }
 
         // Show each word at its timed delay
@@ -87,39 +113,49 @@ export default function BattleScreen({
         return () => {
             wordTimers.forEach(clearTimeout);
             clearTimeout(safety);
+            if (el) el.onended = null;
         };
     }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /* ── When phase becomes 'video', play video + commentary ── */
     useEffect(() => {
-        if (phase === 'video') {
-            // Play commentary audio over the video
-            if (commentaryAudioRef.current && commentaryAudioUrl) {
-                commentaryAudioRef.current.src = commentaryAudioUrl;
-                commentaryAudioRef.current.volume = 1.0;
-                commentaryAudioRef.current.play().catch(() => { });
-            }
+        if (phase !== 'video') return;
 
-            if (videoRef.current && videoDataUrl) {
-                videoRef.current.src = videoDataUrl;
-                videoRef.current.volume = 0.3;
-                videoRef.current.play().catch(() => { });
+        console.log('[BattleScreen] Video phase — hasVideo:', !!videoDataUrl,
+            'hasCommentaryUrl:', !!commentaryAudioUrl);
 
-                videoRef.current.onended = () => {
-                    setPhase('verdict');
-                };
-            } else {
-                // No video — play commentary over black, advance when it ends
-                console.log('[BattleScreen] No video available, playing commentary then verdict');
-                if (commentaryAudioRef.current && commentaryAudioUrl) {
-                    commentaryAudioRef.current.onended = () => setPhase('verdict');
-                    const skip = setTimeout(() => setPhase('verdict'), 15000);
-                    return () => clearTimeout(skip);
-                } else {
-                    const skip = setTimeout(() => setPhase('verdict'), 4000);
-                    return () => clearTimeout(skip);
-                }
-            }
+        // Play commentary if URL is available
+        if (commentaryAudioRef.current && commentaryAudioUrl) {
+            commentaryAudioRef.current.src = commentaryAudioUrl;
+            commentaryAudioRef.current.volume = 1.0;
+            commentaryAudioRef.current.play()
+                .then(() => console.log('[BattleScreen] ✅ Commentary playing'))
+                .catch(e => console.error('[BattleScreen] ❌ Commentary play failed:', e));
+        }
+
+        if (videoRef.current && videoDataUrl) {
+            // Has video — play it, advance when it ends
+            videoRef.current.src = videoDataUrl;
+            videoRef.current.volume = 0.3;
+            videoRef.current.play().catch(e => console.error('[BattleScreen] Video play failed:', e));
+            videoRef.current.onended = () => setPhase('verdict');
+        } else if (commentaryAudioUrl) {
+            // No video, but have commentary — let it play, advance when it ends
+            commentaryAudioRef.current.onended = () => {
+                console.log('[BattleScreen] Commentary ended → verdict');
+                setPhase('verdict');
+            };
+            const skip = setTimeout(() => setPhase('verdict'), 25000);
+            return () => clearTimeout(skip);
+        } else {
+            // No video, no commentary yet — wait for commentary URL to arrive
+            // (this effect re-runs when commentaryAudioUrl changes)
+            console.log('[BattleScreen] Waiting for commentary URL to arrive…');
+            const skip = setTimeout(() => {
+                console.warn('[BattleScreen] Commentary URL timeout → verdict');
+                setPhase('verdict');
+            }, 15000);
+            return () => clearTimeout(skip);
         }
     }, [phase, videoDataUrl, commentaryAudioUrl]);
 
@@ -138,7 +174,7 @@ export default function BattleScreen({
             if (verdictAudioUrl && verdictAudioRef.current) {
                 verdictAudioRef.current.src = verdictAudioUrl;
                 verdictAudioRef.current.volume = 0.9;
-                verdictAudioRef.current.play().catch(() => { });
+                verdictAudioRef.current.play().catch(e => console.error('[BattleScreen] Verdict play failed:', e));
             }
         }
     }, [phase, verdictAudioUrl]);
@@ -153,11 +189,11 @@ export default function BattleScreen({
             fontFamily: "'Inter', sans-serif",
         }}>
             {/* Hidden audio for verdict */}
-            <audio ref={verdictAudioRef} />
+            <audio ref={verdictAudioRef} preload="auto" />
             {/* Fight commentary audio */}
-            <audio ref={commentaryAudioRef} />
+            <audio ref={commentaryAudioRef} preload="auto" />
             {/* Rumble announcement audio */}
-            <audio ref={rumbleAudioRef} src={rumbleAudio} />
+            <audio ref={rumbleAudioRef} src={rumbleAudio} preload="auto" />
 
             {/* ── RUMBLE INTRO ── */}
             {phase === 'rumble' && (
